@@ -21,22 +21,62 @@ import com.podio.oauth.OAuthUsernameCredentials;
 import com.podio.org.OrganizationWithSpaces;
 import com.podio.space.SpaceMini;
 
+/**
+ * Scans for files in the API and uploads to Dropbox.
+ * 
+ * Was done in 2 hours as part of the Podio API hackaton
+ * 
+ * @author Team Dropbox
+ */
 public class FileScanner {
 
+	/**
+	 * The temporary directory the files will be written to
+	 */
 	private static final String TMP_DIR = System.getProperty("java.io.tmpdir");
 
+	/**
+	 * The page size to use when quering files in the Podio
+	 */
 	private static final int PAGE_SIZE = 100;
 
+	/**
+	 * The main Podio API
+	 */
 	private final APIFactory podioAPIFactory;
+	/**
+	 * Dropbox API
+	 */
 	private final DropboxAPI dropBoxAPI;
+	/**
+	 * The root folder in Dropbox, must be dropbox or sandbox
+	 */
 	private final String root;
+	/**
+	 * The main folder to put the files in
+	 */
 	private final String main;
+	/**
+	 * The organization to synchronize
+	 */
 	private final String organization;
 
+	/**
+	 * The cache for existing files
+	 */
 	private final Map<String, List<String>> fileMap = new HashMap<String, List<String>>();
 
+	/**
+	 * We limit uploads to not let it go crazy
+	 */
 	private int uploadsLeft = 10;
 
+	/**
+	 * Create a new scanner with configuration from config.properties
+	 * 
+	 * @throws IOException
+	 *             If there was an error loading the configuration file
+	 */
 	public FileScanner() throws IOException {
 		Properties properties = new Properties();
 		properties.load(new FileInputStream("config.properties"));
@@ -64,15 +104,19 @@ public class FileScanner {
 		System.out.println(organization);
 	}
 
+	/**
+	 * Scans the files in Podio and upload new files
+	 */
 	public void scan() throws IOException {
 		List<OrganizationWithSpaces> organizations = podioAPIFactory
 				.getOrgAPI().getOrganizations();
 		for (OrganizationWithSpaces organization : organizations) {
 			if (organization.getName().equals(this.organization)) {
-				System.out.println(organization.getName());
+				System.out.println("Processing organization "
+						+ organization.getName());
 				List<SpaceMini> spaces = organization.getSpaces();
 				for (SpaceMini space : spaces) {
-					System.out.println(" - " + space.getName());
+					System.out.println("Processing space " + space.getName());
 
 					scanSpace(organization, space);
 				}
@@ -80,6 +124,9 @@ public class FileScanner {
 		}
 	}
 
+	/**
+	 * Scans the specific space and uploads any files found
+	 */
 	private void scanSpace(OrganizationWithSpaces organization, SpaceMini space)
 			throws IOException {
 		String spaceFolder = "/" + main + "/" + organization.getName() + "/"
@@ -93,12 +140,12 @@ public class FileScanner {
 
 			for (File file : files) {
 				boolean uploaded = upload(spaceFolder, file);
-				System.out.println("Uploaded? " + uploaded);
 
 				if (uploaded) {
 					uploadsLeft--;
 					if (uploadsLeft == 0) {
-						System.out.println("Reached file limit");
+						System.out
+								.println("File limit reached, stopping for now");
 						System.exit(0);
 					}
 				}
@@ -112,10 +159,18 @@ public class FileScanner {
 		}
 	}
 
+	/**
+	 * Checks if the file is already uploaded
+	 */
 	private boolean exists(String folder, String name) {
 		return getExistingFiles(folder).contains(name);
 	}
 
+	/**
+	 * Gets the existing files in a folder
+	 * 
+	 * Cached to limit calls to the Dropbox API
+	 */
 	private List<String> getExistingFiles(String folder) {
 		List<String> list = fileMap.get(folder);
 		if (list == null) {
@@ -138,6 +193,9 @@ public class FileScanner {
 		}
 	}
 
+	/**
+	 * Uploads the file to dropbox
+	 */
 	private boolean upload(String spaceFolder, File file) throws IOException {
 		FilePath path = getPath(file);
 		if (path != null) {
@@ -146,17 +204,21 @@ public class FileScanner {
 				fileFolder += path.getPath() + "/";
 			}
 
+			System.out.println("Processing file " + path.getName());
+
 			if (exists(fileFolder, path.getName())) {
-				System.out.println("Skipping file " + path.getName());
+				System.out.println("Skipping file, already uploaded");
 				return false;
 			}
 
-			System.out.println("Uploading " + path.getName());
+			System.out.println("Downloading file to local storage");
 
 			java.io.File tmpFile = new java.io.File(TMP_DIR + "/"
 					+ path.getName());
 
 			podioAPIFactory.getFileAPI().downloadFile(file.getId(), tmpFile);
+
+			System.out.println("Uplading file to Dropbox, stand by");
 
 			dropBoxAPI.putFile(root, fileFolder, tmpFile);
 
@@ -166,6 +228,9 @@ public class FileScanner {
 		}
 	}
 
+	/**
+	 * Returns the path and filename to use for a file
+	 */
 	private FilePath getPath(File file) {
 		String filename = file.getName();
 		filename = filename.replace(' ', '_');
@@ -190,7 +255,10 @@ public class FileScanner {
 		}
 	}
 
-	private static class FilePath {
+	/**
+	 * Small helper class to hold path and file name
+	 */
+	private static final class FilePath {
 
 		private final String path;
 
@@ -211,6 +279,9 @@ public class FileScanner {
 		}
 	}
 
+	/**
+	 * Starts the updater and uploads files to Dropbox
+	 */
 	public static void main(String[] args) throws IOException {
 		new FileScanner().scan();
 	}
