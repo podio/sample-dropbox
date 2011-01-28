@@ -1,0 +1,9 @@
+dropbox.user.mail=ENTER HERE
+dropbox.user.password=ENTER HERE
+dropbox.folder.root=dropbox
+dropbox.folder.main=podio
+podio.client.mail=ENTER HERE
+podio.client.secret=ENTER HERE
+podio.user.mail=ENTER HERE
+podio.user.password=ENTER HERE
+podio.organization=Podio
